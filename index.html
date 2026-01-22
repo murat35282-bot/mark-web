@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mark - Web</title>
+  <style>
+    body{
+      margin:0;
+      font-family: Arial, sans-serif;
+      background:#0b0f14;
+      color:#e6e6e6;
+      height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+    header{
+      padding:14px 16px;
+      background:#111826;
+      border-bottom:1px solid #1f2a3a;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+    }
+    header h1{
+      margin:0;
+      font-size:18px;
+      color:#fff;
+    }
+    #status{
+      font-size:12px;
+      opacity:.75;
+      white-space:nowrap;
+    }
+    #chatbox{
+      flex:1;
+      padding:16px;
+      overflow-y:auto;
+    }
+    .msg{
+      max-width:85%;
+      padding:10px 12px;
+      border-radius:12px;
+      margin-bottom:10px;
+      line-height:1.4;
+      white-space:pre-wrap;
+      word-wrap:break-word;
+    }
+    .user{
+      background:#2563eb;
+      margin-left:auto;
+      color:#fff;
+    }
+    .bot{
+      background:#1f2937;
+      margin-right:auto;
+      color:#e5e7eb;
+    }
+    footer{
+      padding:12px;
+      background:#111826;
+      border-top:1px solid #1f2a3a;
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    input{
+      flex:1;
+      padding:12px;
+      border-radius:10px;
+      border:none;
+      outline:none;
+      background:#0b1220;
+      color:#fff;
+      font-size:14px;
+    }
+    button{
+      padding:12px 14px;
+      border:none;
+      border-radius:10px;
+      font-weight:bold;
+      cursor:pointer;
+      background:#22c55e;
+      color:#000;
+    }
+    .btn2{
+      background:#f59e0b;
+      color:#000;
+    }
+    .btn3{
+      background:#ef4444;
+      color:#fff;
+    }
+    button:active{
+      transform:scale(.98);
+    }
+    .topBtns{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Mark Asistan</h1>
+  <div class="topBtns">
+    <button class="btn2" onclick="sendQuick('Jarvis aç')">Jarvis Aç</button>
+    <button class="btn2" onclick="sendQuick('Jarvis kapat')">Jarvis Kapat</button>
+    <button class="btn3" onclick="resetMemory()">Hafızayı Sıfırla</button>
+    <span id="status">Hazır</span>
+  </div>
+</header>
+
+<div id="chatbox"></div>
+
+<footer>
+  <input id="msg" placeholder="Mesaj yaz... (Enter ile gönder)" />
+  <button onclick="sendMessage()">Gönder</button>
+</footer>
+
+<script>
+  const chatbox = document.getElementById("chatbox");
+  const msgInput = document.getElementById("msg");
+  const statusText = document.getElementById("status");
+
+  // ==============================
+  // USER ID (herkese ayrı hafıza)
+  // ==============================
+  function getUserId() {
+    let id = localStorage.getItem("mark_user_id");
+    if (!id) {
+      // crypto.randomUUID desteklemeyen cihazlar için fallback var
+      if (crypto && crypto.randomUUID) {
+        id = crypto.randomUUID();
+      } else {
+        id = "user_" + Math.random().toString(16).slice(2) + Date.now();
+      }
+      localStorage.setItem("mark_user_id", id);
+    }
+    return id;
+  }
+
+  let user_id = getUserId();
+
+  function addMessage(text, who) {
+    const div = document.createElement("div");
+    div.className = "msg " + who;
+    div.textContent = text;
+    chatbox.appendChild(div);
+    chatbox.scrollTop = chatbox.scrollHeight;
+  }
+
+  async function callChatApi(text) {
+    statusText.textContent = "Yazıyor...";
+
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        message: text,
+        user_id: user_id
+      })
+    });
+
+    const data = await res.json();
+
+    // backend user_id döndürürse güncelle
+    if (data.user_id) {
+      user_id = data.user_id;
+      localStorage.setItem("mark_user_id", user_id);
+    }
+
+    statusText.textContent = "Hazır";
+    return data.reply;
+  }
+
+  async function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text) return;
+
+    addMessage(text, "user");
+    msgInput.value = "";
+
+    try {
+      const reply = await callChatApi(text);
+      addMessage(reply, "bot");
+    } catch (err) {
+      addMessage("Sunucuya bağlanamadım Patron. Render çökmüş olabilir.", "bot");
+      statusText.textContent = "Hata";
+    }
+  }
+
+  async function sendQuick(text) {
+    addMessage(text, "user");
+    try {
+      const reply = await callChatApi(text);
+      addMessage(reply, "bot");
+    } catch (err) {
+      addMessage("Sunucuya bağlanamadım Patron.", "bot");
+      statusText.textContent = "Hata";
+    }
+  }
+
+  function resetMemory() {
+    // Bu sadece tarayıcı tarafında user_id sıfırlar.
+    // Yeni user_id => yeni hafıza
+    localStorage.removeItem("mark_user_id");
+    user_id = getUserId();
+
+    chatbox.innerHTML = "";
+    addMessage("Hafıza sıfırlandı. Yeni oturum başladı.", "bot");
+  }
+
+  msgInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage();
+  });
+
+  // Açılış mesajı
+  addMessage("Mark hazır.\nKomutlar: Jarvis aç / Jarvis kapat\nNot: Hafıza bu cihazda user_id ile tutulur.", "bot");
+</script>
+
+</body>
+</html>
